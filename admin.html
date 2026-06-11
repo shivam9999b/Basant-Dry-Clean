@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FreshPress Admin Panel</title>
+    <meta name="description" content="Full control admin panel for FreshPress Cloth Care." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="index.html" aria-label="FreshPress website">
+        <span class="brand-mark">FP</span>
+        <span>FreshPress Admin</span>
+      </a>
+      <nav aria-label="Admin navigation">
+        <a href="#dashboard" class="active">Dashboard</a>
+        <a href="#content">Site Content</a>
+        <a href="#services">Services</a>
+        <a href="#prices">Prices</a>
+        <a href="#bookings">Bookings</a>
+        <a href="#settings">Settings</a>
+      </nav>
+      <a class="site-link" href="index.html">View website</a>
+    </aside>
+
+    <main class="admin-main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Full control</p>
+          <h1>Admin Panel</h1>
+        </div>
+        <div class="top-actions">
+          <button class="button" id="seedData" type="button">Load sample bookings</button>
+          <button class="button dark" id="saveAll" type="button">Save all changes</button>
+        </div>
+      </header>
+
+      <section id="dashboard" class="stats-grid" aria-label="Dashboard statistics">
+        <article class="stat-card">
+          <span>Total bookings</span>
+          <strong id="totalBookings">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>New requests</span>
+          <strong id="newBookings">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>In progress</span>
+          <strong id="progressBookings">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Completed</span>
+          <strong id="completedBookings">0</strong>
+        </article>
+      </section>
+
+      <section id="content" class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Website</p>
+            <h2>Homepage control</h2>
+          </div>
+          <p class="save-note" id="contentStatus" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="form-grid two">
+          <label>
+            Business name
+            <input id="businessName" type="text" />
+          </label>
+          <label>
+            Brand short text
+            <input id="brandShort" type="text" maxlength="4" />
+          </label>
+          <label>
+            Display phone
+            <input id="navPhone" type="text" />
+          </label>
+          <label>
+            Click-to-call number
+            <input id="phoneHref" type="text" />
+          </label>
+          <label>
+            Opening hours
+            <input id="hours" type="text" />
+          </label>
+          <label>
+            Hero eyebrow
+            <input id="heroEyebrow" type="text" />
+          </label>
+        </div>
+
+        <label>
+          Hero title
+          <textarea id="heroTitle" rows="2"></textarea>
+        </label>
+        <label>
+          Hero text
+          <textarea id="heroText" rows="3"></textarea>
+        </label>
+
+        <div class="editor-block">
+          <div class="mini-header">
+            <h3>Hero photo</h3>
+            <button class="button" id="resetHeroImage" type="button">Use default photo</button>
+          </div>
+          <div class="photo-control">
+            <figure class="photo-preview">
+              <img id="heroImagePreview" src="assets/pressing-studio.png" alt="Current hero preview" />
+            </figure>
+            <div>
+              <label>
+                Photo URL or local path
+                <input id="heroImage" type="text" />
+              </label>
+              <label>
+                Photo alt text
+                <input id="heroImageAlt" type="text" />
+              </label>
+              <div class="photo-actions">
+                <label class="file-button">
+                  Upload photo
+                  <input id="heroImageUpload" type="file" accept="image/*" />
+                </label>
+                <button class="button" id="applyHeroImage" type="button">Preview photo</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-grid two">
+          <label>
+            Primary button
+            <input id="primaryCta" type="text" />
+          </label>
+          <label>
+            Secondary button
+            <input id="secondaryCta" type="text" />
+          </label>
+          <label>
+            Booking heading
+            <input id="bookingTitle" type="text" />
+          </label>
+          <label>
+            Booking eyebrow
+            <input id="bookingEyebrow" type="text" />
+          </label>
+        </div>
+
+        <label>
+          Booking text
+          <textarea id="bookingText" rows="3"></textarea>
+        </label>
+
+        <div class="editor-block">
+          <div class="mini-header">
+            <h3>Hero stats</h3>
+            <button class="button" data-add="stats" type="button">Add stat</button>
+          </div>
+          <div id="statsEditor" class="repeat-list"></div>
+        </div>
+
+        <div class="editor-block">
+          <div class="mini-header">
+            <h3>Promise strip</h3>
+            <button class="button" data-add="promises" type="button">Add promise</button>
+          </div>
+          <div id="promisesEditor" class="repeat-list"></div>
+        </div>
+      </section>
+
+      <section id="services" class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Cards</p>
+            <h2>Services and process</h2>
+          </div>
+        </div>
+        <div class="form-grid two">
+          <label>
+            Services eyebrow
+            <input id="servicesEyebrow" type="text" />
+          </label>
+          <label>
+            Services title
+            <input id="servicesTitle" type="text" />
+          </label>
+          <label>
+            Process eyebrow
+            <input id="processEyebrow" type="text" />
+          </label>
+          <label>
+            Process title
+            <input id="processTitle" type="text" />
+          </label>
+        </div>
+
+        <div class="editor-block">
+          <div class="mini-header">
+            <h3>Service cards</h3>
+            <button class="button" data-add="services" type="button">Add service</button>
+          </div>
+          <div id="servicesEditor" class="repeat-list"></div>
+        </div>
+
+        <div class="editor-block">
+          <div class="mini-header">
+            <h3>Process steps</h3>
+            <button class="button" data-add="steps" type="button">Add step</button>
+          </div>
+          <div id="stepsEditor" class="repeat-list"></div>
+        </div>
+      </section>
+
+      <section id="prices" class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Rate card</p>
+            <h2>Pricing control</h2>
+          </div>
+          <button class="button" data-add="prices" type="button">Add price</button>
+        </div>
+        <div class="form-grid two">
+          <label>
+            Pricing eyebrow
+            <input id="pricingEyebrow" type="text" />
+          </label>
+          <label>
+            Pricing title
+            <input id="pricingTitle" type="text" />
+          </label>
+        </div>
+        <div id="pricesEditor" class="repeat-list"></div>
+      </section>
+
+      <section id="bookings" class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Orders</p>
+            <h2>Booking control</h2>
+          </div>
+          <div class="tools">
+            <input id="searchInput" type="search" placeholder="Search name, phone, order" />
+            <select id="statusFilter" aria-label="Filter booking status">
+              <option value="All">All statuses</option>
+              <option value="New">New</option>
+              <option value="Confirmed">Confirmed</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+            <button class="button" id="addBooking" type="button">Add booking</button>
+            <button class="button" id="exportCsv" type="button">Export CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Customer</th>
+                <th>Service</th>
+                <th>Details</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="bookingRows"></tbody>
+          </table>
+        </div>
+        <p class="empty-state" id="emptyState">No bookings yet. Submit the website form, add one here, or load sample bookings.</p>
+      </section>
+
+      <section id="settings" class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Settings</p>
+            <h2>Data and service status</h2>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <label class="toggle-row">
+            <input id="pickupToggle" type="checkbox" checked />
+            Pickup available
+          </label>
+          <label class="toggle-row">
+            <input id="urgentToggle" type="checkbox" />
+            Accept urgent orders
+          </label>
+          <label>
+            Closing note
+            <textarea id="closingNote" rows="3" placeholder="Example: Orders after 7 PM move to next day."></textarea>
+          </label>
+        </div>
+        <div class="danger-row">
+          <button class="button" id="exportData" type="button">Export all data</button>
+          <label class="file-button">
+            Import data
+            <input id="importData" type="file" accept="application/json" />
+          </label>
+          <button class="button danger" id="resetContent" type="button">Reset content</button>
+          <button class="button danger" id="clearBookings" type="button">Clear bookings</button>
+        </div>
+      </section>
+    </main>
+
+    <template id="bookingDialogTemplate">
+      <dialog class="dialog">
+        <form method="dialog" class="dialog-card" id="bookingDialogForm">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Booking</p>
+              <h2 id="dialogTitle">Edit booking</h2>
+            </div>
+            <button class="icon-button" value="cancel" type="submit" aria-label="Close">x</button>
+          </div>
+          <input id="dialogBookingId" type="hidden" />
+          <label>
+            Name
+            <input id="dialogName" type="text" required />
+          </label>
+          <label>
+            Phone
+            <input id="dialogPhone" type="tel" required />
+          </label>
+          <label>
+            Service
+            <input id="dialogService" type="text" required />
+          </label>
+          <label>
+            Details
+            <textarea id="dialogDetails" rows="4"></textarea>
+          </label>
+          <label>
+            Status
+            <select id="dialogStatus">
+              <option>New</option>
+              <option>Confirmed</option>
+              <option>In Progress</option>
+              <option>Completed</option>
+              <option>Cancelled</option>
+            </select>
+          </label>
+          <div class="dialog-actions">
+            <button class="button" value="cancel" type="submit">Cancel</button>
+            <button class="button dark" id="saveBookingDialog" value="default" type="button">Save booking</button>
+          </div>
+        </form>
+      </dialog>
+    </template>
+
+    <script src="admin.js"></script>
+  </body>
+</html>
