@@ -1,23 +1,23 @@
-// Import the functions you need from the SDKs you need
+// ============================================
+// FIREBASE INTEGRATION - SAFE VERSION
+// ============================================
+
+// Import Firebase
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, 
   collection, 
   doc, 
-  getDoc, 
   getDocs, 
   setDoc, 
-  updateDoc, 
   deleteDoc, 
   query, 
-  where, 
   orderBy,
   onSnapshot,
-  addDoc,
-  serverTimestamp 
+  addDoc 
 } from "firebase/firestore";
 
-// Your web app's Firebase configuration
+// Firebase Config
 const firebaseConfig = {
   apiKey: "AIzaSyDJuljdehf1ItBjFbrsEeHSQ2gGGQTYHYw",
   authDomain: "basant-dry-clean.firebaseapp.com",
@@ -31,424 +31,240 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Collection names
-const COLLECTIONS = {
-  BOOKINGS: 'bookings',
-  CONTENT: 'content',
-  SETTINGS: 'settings'
-};
+console.log('🔥 Firebase initialized');
 
-// ===== FIREBASE HELPERS =====
+// ============================================
+// FIREBASE BACKGROUND SYNC (UI BLOCK NAHI KAREGA)
+// ============================================
 
-async function saveToFirebase(collectionName, data, id = null) {
+// Original functions ko store karo
+const _origSaveBookings = window.saveBookings || saveBookings;
+const _origGetBookings = window.getBookings || getBookings;
+const _origWriteJson = window.writeJson || writeJson;
+const _origReadJson = window.readJson || readJson;
+
+// Firebase save functions (background mein chalenge)
+async function _syncBookingsToFirebase(bookings) {
   try {
-    if (id) {
-      const docRef = doc(db, collectionName, id);
-      await setDoc(docRef, data, { merge: true });
-      return id;
-    } else {
-      const docRef = await addDoc(collection(db, collectionName), data);
-      return docRef.id;
+    // Purani bookings hatao
+    const snapshot = await getDocs(collection(db, 'bookings'));
+    for (const docSnap of snapshot.docs) {
+      await deleteDoc(docSnap.ref);
     }
-  } catch (error) {
-    console.error(`Error saving to ${collectionName}:`, error);
-    throw error;
-  }
-}
-
-async function getAllFromFirebase(collectionName) {
-  try {
-    const querySnapshot = await getDocs(collection(db, collectionName));
-    const results = [];
-    querySnapshot.forEach((doc) => {
-      results.push({ id: doc.id, ...doc.data() });
-    });
-    return results;
-  } catch (error) {
-    console.error(`Error getting from ${collectionName}:`, error);
-    return [];
-  }
-}
-
-async function getFromFirebase(collectionName, id) {
-  try {
-    const docRef = doc(db, collectionName, id);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() };
-    }
-    return null;
-  } catch (error) {
-    console.error(`Error getting document from ${collectionName}:`, error);
-    return null;
-  }
-}
-
-async function deleteFromFirebase(collectionName, id) {
-  try {
-    await deleteDoc(doc(db, collectionName, id));
-    return true;
-  } catch (error) {
-    console.error(`Error deleting from ${collectionName}:`, error);
-    return false;
-  }
-}
-
-function subscribeToBookings(callback) {
-  const q = query(collection(db, COLLECTIONS.BOOKINGS), orderBy('createdAt', 'desc'));
-  return onSnapshot(q, (querySnapshot) => {
-    const bookings = [];
-    querySnapshot.forEach((doc) => {
-      bookings.push({ id: doc.id, ...doc.data() });
-    });
-    callback(bookings);
-  });
-}
-
-function subscribeToContent(callback) {
-  const q = query(collection(db, COLLECTIONS.CONTENT));
-  return onSnapshot(q, (querySnapshot) => {
-    const contents = [];
-    querySnapshot.forEach((doc) => {
-      contents.push({ id: doc.id, ...doc.data() });
-    });
-    callback(contents);
-  });
-}
-
-function subscribeToSettings(callback) {
-  const q = query(collection(db, COLLECTIONS.SETTINGS));
-  return onSnapshot(q, (querySnapshot) => {
-    const settings = [];
-    querySnapshot.forEach((doc) => {
-      settings.push({ id: doc.id, ...doc.data() });
-    });
-    callback(settings);
-  });
-}
-
-// ===== ORIGINAL FUNCTIONS (UNCHANGED) =====
-// Store original functions
-const originalGetBookings = window.getBookings || function() {
-  try {
-    return JSON.parse(localStorage.getItem(bookingKey) || JSON.stringify([]));
-  } catch {
-    return [];
-  }
-};
-
-const originalSaveBookings = window.saveBookings || function(bookings) {
-  localStorage.setItem(bookingKey, JSON.stringify(bookings));
-};
-
-const originalReadJson = window.readJson || function(key, fallback) {
-  try {
-    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
-  } catch {
-    return fallback;
-  }
-};
-
-const originalWriteJson = window.writeJson || function(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
-};
-
-// ===== MODIFIED FUNCTIONS (SYNC VERSION - NO ASYNC) =====
-// These now work synchronously like original
-
-function getBookings() {
-  // Always return from localStorage first (synchronous)
-  return originalReadJson(bookingKey, []);
-}
-
-function saveBookings(bookings) {
-  // Save to localStorage (synchronous)
-  originalSaveBookings(bookings);
-  
-  // Try to save to Firebase in background (don't block)
-  try {
-    saveBookingsToFirebase(bookings).catch(err => {
-      console.warn('Firebase save failed (background):', err);
-    });
-  } catch (e) {
-    console.warn('Firebase not available:', e);
-  }
-}
-
-function readJson(key, fallback) {
-  // Always return from localStorage first (synchronous)
-  return originalReadJson(key, fallback);
-}
-
-function writeJson(key, value) {
-  // Save to localStorage (synchronous)
-  originalWriteJson(key, value);
-  
-  // Try to save to Firebase in background (don't block)
-  try {
-    if (key === bookingKey) {
-      saveBookingsToFirebase(value).catch(err => {
-        console.warn('Firebase save failed (background):', err);
-      });
-    } else if (key === contentKey) {
-      saveContentToFirebase(value).catch(err => {
-        console.warn('Firebase save failed (background):', err);
-      });
-    } else if (key === settingsKey) {
-      saveSettingsToFirebase(value).catch(err => {
-        console.warn('Firebase save failed (background):', err);
-      });
-    }
-  } catch (e) {
-    console.warn('Firebase not available:', e);
-  }
-}
-
-// ===== FIREBASE BACKGROUND SAVE FUNCTIONS =====
-async function saveBookingsToFirebase(bookings) {
-  try {
+    // Nayi bookings daalo
     for (const booking of bookings) {
-      const { id, ...bookingData } = booking;
-      if (id) {
-        await saveToFirebase(COLLECTIONS.BOOKINGS, bookingData, id);
-      } else {
-        await saveToFirebase(COLLECTIONS.BOOKINGS, bookingData);
-      }
+      const { id, ...data } = booking;
+      await addDoc(collection(db, 'bookings'), { ...data, _id: id });
     }
-    return true;
-  } catch (error) {
-    console.error('Error saving bookings to Firebase:', error);
-    return false;
+    console.log('✅ Bookings synced to Firebase');
+  } catch (e) {
+    console.warn('⚠️ Firebase sync error:', e.message);
   }
 }
 
-async function getBookingsFromFirebase() {
+async function _syncContentToFirebase(contentData) {
   try {
-    return await getAllFromFirebase(COLLECTIONS.BOOKINGS);
-  } catch (error) {
-    console.error('Error fetching bookings from Firebase:', error);
-    return [];
-  }
-}
-
-async function saveContentToFirebase(contentData) {
-  try {
-    const existing = await getAllFromFirebase(COLLECTIONS.CONTENT);
-    if (existing.length > 0) {
-      const docId = existing[0].id;
-      await saveToFirebase(COLLECTIONS.CONTENT, contentData, docId);
+    const snapshot = await getDocs(collection(db, 'content'));
+    if (snapshot.empty) {
+      await addDoc(collection(db, 'content'), contentData);
     } else {
-      await saveToFirebase(COLLECTIONS.CONTENT, contentData);
+      await setDoc(doc(db, 'content', snapshot.docs[0].id), contentData);
     }
-    return true;
-  } catch (error) {
-    console.error('Error saving content to Firebase:', error);
-    return false;
+    console.log('✅ Content synced to Firebase');
+  } catch (e) {
+    console.warn('⚠️ Firebase content error:', e.message);
   }
 }
 
-async function getContentFromFirebase() {
+async function _syncSettingsToFirebase(settingsData) {
   try {
-    const contents = await getAllFromFirebase(COLLECTIONS.CONTENT);
-    if (contents.length > 0) {
-      let merged = {};
-      contents.forEach(content => {
-        merged = { ...merged, ...content };
+    const snapshot = await getDocs(collection(db, 'settings'));
+    if (snapshot.empty) {
+      await addDoc(collection(db, 'settings'), settingsData);
+    } else {
+      await setDoc(doc(db, 'settings', snapshot.docs[0].id), settingsData);
+    }
+    console.log('✅ Settings synced to Firebase');
+  } catch (e) {
+    console.warn('⚠️ Firebase settings error:', e.message);
+  }
+}
+
+// ============================================
+// OVERRIDE FUNCTIONS - PEHLE JAISA KAAM KARENGE
+// ============================================
+
+// getBookings - localStorage se hi return (instant)
+window.getBookings = function() {
+  return _origGetBookings();
+};
+
+// saveBookings - localStorage + background Firebase
+window.saveBookings = function(bookings) {
+  _origSaveBookings(bookings);
+  // Background mein Firebase save
+  _syncBookingsToFirebase(bookings).catch(() => {});
+};
+
+// readJson - localStorage se hi return
+window.readJson = function(key, fallback) {
+  return _origReadJson(key, fallback);
+};
+
+// writeJson - localStorage + background Firebase
+window.writeJson = function(key, value) {
+  _origWriteJson(key, value);
+  // Background mein Firebase save
+  if (key === 'freshpress-bookings') {
+    _syncBookingsToFirebase(value).catch(() => {});
+  } else if (key === 'freshpress-content') {
+    _syncContentToFirebase(value).catch(() => {});
+  } else if (key === 'freshpress-settings') {
+    _syncSettingsToFirebase(value).catch(() => {});
+  }
+};
+
+// ============================================
+// PULL FROM FIREBASE (MANUAL)
+// ============================================
+
+async function pullFromFirebase() {
+  try {
+    const statusEl = document.querySelector('#contentStatus');
+    if (statusEl) statusEl.textContent = '☁️ Pulling from Firebase...';
+    
+    // Pull bookings
+    const bookingSnapshot = await getDocs(collection(db, 'bookings'));
+    const fbBookings = [];
+    bookingSnapshot.forEach(doc => {
+      const data = doc.data();
+      fbBookings.push({ id: data._id || doc.id, ...data });
+    });
+    if (fbBookings.length > 0) {
+      _origSaveBookings(fbBookings);
+      if (typeof renderBookings === 'function') renderBookings();
+    }
+    
+    // Pull content
+    const contentSnapshot = await getDocs(collection(db, 'content'));
+    if (!contentSnapshot.empty) {
+      const contentData = contentSnapshot.docs[0].data();
+      _origWriteJson('freshpress-content', contentData);
+      // Reload content
+      content = mergeContent(contentData);
+      if (typeof setSimpleFields === 'function') setSimpleFields();
+      if (typeof renderRepeatEditors === 'function') renderRepeatEditors();
+    }
+    
+    // Pull settings
+    const settingsSnapshot = await getDocs(collection(db, 'settings'));
+    if (!settingsSnapshot.empty) {
+      const settingsData = settingsSnapshot.docs[0].data();
+      _origWriteJson('freshpress-settings', settingsData);
+      if (typeof loadSettings === 'function') loadSettings();
+    }
+    
+    if (statusEl) statusEl.textContent = '✅ Pulled from Firebase successfully!';
+    console.log('✅ Pulled from Firebase');
+  } catch (e) {
+    console.error('Pull error:', e);
+    const statusEl = document.querySelector('#contentStatus');
+    if (statusEl) statusEl.textContent = '❌ Pull failed: ' + e.message;
+  }
+}
+
+// ============================================
+// REAL-TIME LISTENERS (AUTO SYNC)
+// ============================================
+
+let _listenersStarted = false;
+
+function startFirebaseListeners() {
+  if (_listenersStarted) return;
+  _listenersStarted = true;
+  
+  try {
+    // Bookings listener
+    const q = query(collection(db, 'bookings'), orderBy('createdAt', 'desc'));
+    onSnapshot(q, (snapshot) => {
+      const bookings = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        bookings.push({ id: data._id || doc.id, ...data });
       });
-      delete merged.id;
-      return merged;
-    }
-    return null;
-  } catch (error) {
-    console.error('Error fetching content from Firebase:', error);
-    return null;
-  }
-}
-
-async function saveSettingsToFirebase(settingsData) {
-  try {
-    const existing = await getAllFromFirebase(COLLECTIONS.SETTINGS);
-    if (existing.length > 0) {
-      const docId = existing[0].id;
-      await saveToFirebase(COLLECTIONS.SETTINGS, settingsData, docId);
-    } else {
-      await saveToFirebase(COLLECTIONS.SETTINGS, settingsData);
-    }
-    return true;
-  } catch (error) {
-    console.error('Error saving settings to Firebase:', error);
-    return false;
-  }
-}
-
-async function getSettingsFromFirebase() {
-  try {
-    const settings = await getAllFromFirebase(COLLECTIONS.SETTINGS);
-    if (settings.length > 0) {
-      const { id, ...settingsData } = settings[0];
-      return settingsData;
-    }
-    return null;
-  } catch (error) {
-    console.error('Error fetching settings from Firebase:', error);
-    return null;
-  }
-}
-
-// ===== PULL DATA FROM FIREBASE =====
-async function pullAllFromFirebase() {
-  try {
-    contentStatus.textContent = 'Pulling from Firebase...';
-    
-    const firebaseContent = await getContentFromFirebase();
-    if (firebaseContent) {
-      originalWriteJson(contentKey, firebaseContent);
-      content = mergeContent(firebaseContent);
-      setSimpleFields();
-      renderRepeatEditors();
-    }
-    
-    const firebaseSettings = await getSettingsFromFirebase();
-    if (firebaseSettings) {
-      originalWriteJson(settingsKey, firebaseSettings);
-      loadSettings();
-    }
-    
-    const firebaseBookings = await getBookingsFromFirebase();
-    if (firebaseBookings.length > 0) {
-      originalSaveBookings(firebaseBookings);
-      renderBookings();
-    }
-    
-    contentStatus.textContent = 'All data pulled from Firebase successfully!';
-  } catch (error) {
-    contentStatus.textContent = 'Pull failed: ' + error.message;
-    console.error('Pull failed:', error);
-  }
-}
-
-// ===== INITIALIZE FIREBASE LISTENERS =====
-let isSubscribed = false;
-
-function initFirebaseListeners() {
-  if (isSubscribed) return;
-  
-  try {
-    subscribeToBookings((bookings) => {
       if (bookings.length > 0) {
-        // Only update if different from localStorage
-        const local = originalReadJson(bookingKey, []);
+        const local = _origReadJson('freshpress-bookings', []);
         if (JSON.stringify(local) !== JSON.stringify(bookings)) {
-          originalSaveBookings(bookings);
-          renderBookings();
-          console.log('Bookings updated from Firebase');
+          _origSaveBookings(bookings);
+          if (typeof renderBookings === 'function') renderBookings();
+          console.log('📡 Bookings auto-synced from Firebase');
         }
       }
     });
     
-    subscribeToContent((contents) => {
-      if (contents.length > 0) {
-        const { id, ...contentData } = contents[0];
-        const local = originalReadJson(contentKey, {});
+    // Content listener
+    onSnapshot(collection(db, 'content'), (snapshot) => {
+      if (!snapshot.empty) {
+        const contentData = snapshot.docs[0].data();
+        const local = _origReadJson('freshpress-content', {});
         if (JSON.stringify(local) !== JSON.stringify(contentData)) {
-          originalWriteJson(contentKey, contentData);
+          _origWriteJson('freshpress-content', contentData);
           content = mergeContent(contentData);
-          setSimpleFields();
-          renderRepeatEditors();
-          console.log('Content updated from Firebase');
+          if (typeof setSimpleFields === 'function') setSimpleFields();
+          if (typeof renderRepeatEditors === 'function') renderRepeatEditors();
+          console.log('📡 Content auto-synced from Firebase');
         }
       }
     });
     
-    subscribeToSettings((settings) => {
-      if (settings.length > 0) {
-        const { id, ...settingsData } = settings[0];
-        const local = originalReadJson(settingsKey, {});
+    // Settings listener
+    onSnapshot(collection(db, 'settings'), (snapshot) => {
+      if (!snapshot.empty) {
+        const settingsData = snapshot.docs[0].data();
+        const local = _origReadJson('freshpress-settings', {});
         if (JSON.stringify(local) !== JSON.stringify(settingsData)) {
-          originalWriteJson(settingsKey, settingsData);
-          loadSettings();
-          console.log('Settings updated from Firebase');
+          _origWriteJson('freshpress-settings', settingsData);
+          if (typeof loadSettings === 'function') loadSettings();
+          console.log('📡 Settings auto-synced from Firebase');
         }
       }
     });
     
-    isSubscribed = true;
-    console.log('Firebase real-time listeners active');
-  } catch (error) {
-    console.warn('Firebase listeners not available:', error);
+    console.log('🔥 Firebase real-time listeners active');
+  } catch (e) {
+    console.warn('⚠️ Listeners error:', e.message);
+    _listenersStarted = false;
   }
 }
 
-// ===== UI CONTROLS =====
-function addFirebaseControls() {
-  const controlsContainer = document.createElement('div');
-  controlsContainer.className = 'firebase-controls';
-  controlsContainer.style.cssText = `
-    display: flex;
-    gap: 10px;
-    margin: 10px 0;
-    padding: 15px;
-    background: #f0f7ff;
-    border-radius: 8px;
-    border: 1px solid #b8d4f0;
-    align-items: center;
-    flex-wrap: wrap;
-  `;
+// ============================================
+// UI MEIN "PULL FROM CLOUD" BUTTON ADD KARO
+// ============================================
+
+function addFirebaseButton() {
+  const statusEl = document.querySelector('#contentStatus');
+  if (!statusEl) return;
   
-  controlsContainer.innerHTML = `
-    <span style="font-weight: 600; color: #1a5a8a;">☁️ Firebase:</span>
-    <button class="button" id="pullFromFirebase">Pull from Cloud</button>
-    <span id="firebaseStatus" style="color: #2d7a3a; font-size: 0.9rem;">Connected</span>
-  `;
+  const parent = statusEl.parentElement;
+  const btn = document.createElement('button');
+  btn.textContent = '☁️ Pull from Cloud';
+  btn.className = 'button';
+  btn.style.marginLeft = '10px';
+  btn.onclick = pullFromFirebase;
   
-  const statusContainer = document.querySelector('#contentStatus')?.parentElement;
-  if (statusContainer) {
-    statusContainer.insertAdjacentElement('afterend', controlsContainer);
-  }
-  
-  document.querySelector('#pullFromFirebase')?.addEventListener('click', pullAllFromFirebase);
+  parent.insertBefore(btn, statusEl.nextSibling);
 }
 
-// ===== MODIFIED loadAll =====
-// Keep original loadAll, just add Firebase listener initialization
-const originalLoadAll = window.loadAll || function() {
-  content = mergeContent(readJson(contentKey, defaultContent));
-  setSimpleFields();
-  renderRepeatEditors();
-  loadSettings();
-  renderBookings();
-};
+// ============================================
+// INIT
+// ============================================
 
-window.loadAll = function() {
-  // Call original
-  originalLoadAll();
-  
-  // Initialize Firebase listeners in background
-  setTimeout(() => {
-    try {
-      initFirebaseListeners();
-      contentStatus.textContent = 'Connected to Firebase';
-    } catch (e) {
-      console.warn('Firebase init skipped:', e);
-    }
-  }, 1000);
-};
-
-// ===== DOM READY =====
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(addFirebaseControls, 500);
-  loadAll();
-  console.log('FreshPress Admin with Firebase (fixed) initialized');
-});
-
-// Export for debugging
-window.__firebase = {
-  db,
-  getBookingsFromFirebase,
-  saveBookingsToFirebase,
-  getContentFromFirebase,
-  saveContentToFirebase,
-  getSettingsFromFirebase,
-  saveSettingsToFirebase,
-  pullAllFromFirebase
-};
+setTimeout(() => {
+  try {
+    addFirebaseButton();
+    startFirebaseListeners();
+    console.log('✅ Firebase integration complete! Admin panel working normally.');
+  } catch (e) {
+    console.warn('⚠️ Firebase init warning:', e.message);
+  }
+}, 500);
