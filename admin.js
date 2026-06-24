@@ -40,7 +40,6 @@ const COLLECTIONS = {
 
 // ===== FIREBASE HELPERS =====
 
-// Save data to Firebase
 async function saveToFirebase(collectionName, data, id = null) {
   try {
     if (id) {
@@ -57,7 +56,6 @@ async function saveToFirebase(collectionName, data, id = null) {
   }
 }
 
-// Get all documents from a collection
 async function getAllFromFirebase(collectionName) {
   try {
     const querySnapshot = await getDocs(collection(db, collectionName));
@@ -72,7 +70,6 @@ async function getAllFromFirebase(collectionName) {
   }
 }
 
-// Get a single document
 async function getFromFirebase(collectionName, id) {
   try {
     const docRef = doc(db, collectionName, id);
@@ -87,7 +84,6 @@ async function getFromFirebase(collectionName, id) {
   }
 }
 
-// Delete a document
 async function deleteFromFirebase(collectionName, id) {
   try {
     await deleteDoc(doc(db, collectionName, id));
@@ -98,7 +94,6 @@ async function deleteFromFirebase(collectionName, id) {
   }
 }
 
-// Real-time listener for bookings
 function subscribeToBookings(callback) {
   const q = query(collection(db, COLLECTIONS.BOOKINGS), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (querySnapshot) => {
@@ -110,7 +105,6 @@ function subscribeToBookings(callback) {
   });
 }
 
-// Real-time listener for content
 function subscribeToContent(callback) {
   const q = query(collection(db, COLLECTIONS.CONTENT));
   return onSnapshot(q, (querySnapshot) => {
@@ -122,7 +116,6 @@ function subscribeToContent(callback) {
   });
 }
 
-// Real-time listener for settings
 function subscribeToSettings(callback) {
   const q = query(collection(db, COLLECTIONS.SETTINGS));
   return onSnapshot(q, (querySnapshot) => {
@@ -134,27 +127,86 @@ function subscribeToSettings(callback) {
   });
 }
 
-// ===== CONVERT EXISTING FUNCTIONS TO USE FIREBASE =====
-
-// Override localStorage functions with Firebase versions
-const originalGetBookings = getBookings;
-const originalSaveBookings = saveBookings;
-const originalReadJson = readJson;
-const originalWriteJson = writeJson;
-
-// New Firebase-aware functions
-async function getBookingsFromFirebase() {
+// ===== ORIGINAL FUNCTIONS (UNCHANGED) =====
+// Store original functions
+const originalGetBookings = window.getBookings || function() {
   try {
-    return await getAllFromFirebase(COLLECTIONS.BOOKINGS);
-  } catch (error) {
-    console.error('Error fetching bookings from Firebase:', error);
+    return JSON.parse(localStorage.getItem(bookingKey) || JSON.stringify([]));
+  } catch {
     return [];
+  }
+};
+
+const originalSaveBookings = window.saveBookings || function(bookings) {
+  localStorage.setItem(bookingKey, JSON.stringify(bookings));
+};
+
+const originalReadJson = window.readJson || function(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+};
+
+const originalWriteJson = window.writeJson || function(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+};
+
+// ===== MODIFIED FUNCTIONS (SYNC VERSION - NO ASYNC) =====
+// These now work synchronously like original
+
+function getBookings() {
+  // Always return from localStorage first (synchronous)
+  return originalReadJson(bookingKey, []);
+}
+
+function saveBookings(bookings) {
+  // Save to localStorage (synchronous)
+  originalSaveBookings(bookings);
+  
+  // Try to save to Firebase in background (don't block)
+  try {
+    saveBookingsToFirebase(bookings).catch(err => {
+      console.warn('Firebase save failed (background):', err);
+    });
+  } catch (e) {
+    console.warn('Firebase not available:', e);
   }
 }
 
+function readJson(key, fallback) {
+  // Always return from localStorage first (synchronous)
+  return originalReadJson(key, fallback);
+}
+
+function writeJson(key, value) {
+  // Save to localStorage (synchronous)
+  originalWriteJson(key, value);
+  
+  // Try to save to Firebase in background (don't block)
+  try {
+    if (key === bookingKey) {
+      saveBookingsToFirebase(value).catch(err => {
+        console.warn('Firebase save failed (background):', err);
+      });
+    } else if (key === contentKey) {
+      saveContentToFirebase(value).catch(err => {
+        console.warn('Firebase save failed (background):', err);
+      });
+    } else if (key === settingsKey) {
+      saveSettingsToFirebase(value).catch(err => {
+        console.warn('Firebase save failed (background):', err);
+      });
+    }
+  } catch (e) {
+    console.warn('Firebase not available:', e);
+  }
+}
+
+// ===== FIREBASE BACKGROUND SAVE FUNCTIONS =====
 async function saveBookingsToFirebase(bookings) {
   try {
-    // Convert bookings to Firebase format
     for (const booking of bookings) {
       const { id, ...bookingData } = booking;
       if (id) {
@@ -170,35 +222,22 @@ async function saveBookingsToFirebase(bookings) {
   }
 }
 
-async function getContentFromFirebase() {
+async function getBookingsFromFirebase() {
   try {
-    const contents = await getAllFromFirebase(COLLECTIONS.CONTENT);
-    if (contents.length > 0) {
-      // Merge content from all documents (assuming one main content doc)
-      let merged = {};
-      contents.forEach(content => {
-        merged = { ...merged, ...content };
-      });
-      delete merged.id; // Remove the id field
-      return merged;
-    }
-    return null;
+    return await getAllFromFirebase(COLLECTIONS.BOOKINGS);
   } catch (error) {
-    console.error('Error fetching content from Firebase:', error);
-    return null;
+    console.error('Error fetching bookings from Firebase:', error);
+    return [];
   }
 }
 
 async function saveContentToFirebase(contentData) {
   try {
-    // Check if content already exists
     const existing = await getAllFromFirebase(COLLECTIONS.CONTENT);
     if (existing.length > 0) {
-      // Update existing content
       const docId = existing[0].id;
       await saveToFirebase(COLLECTIONS.CONTENT, contentData, docId);
     } else {
-      // Create new content
       await saveToFirebase(COLLECTIONS.CONTENT, contentData);
     }
     return true;
@@ -208,16 +247,20 @@ async function saveContentToFirebase(contentData) {
   }
 }
 
-async function getSettingsFromFirebase() {
+async function getContentFromFirebase() {
   try {
-    const settings = await getAllFromFirebase(COLLECTIONS.SETTINGS);
-    if (settings.length > 0) {
-      const { id, ...settingsData } = settings[0];
-      return settingsData;
+    const contents = await getAllFromFirebase(COLLECTIONS.CONTENT);
+    if (contents.length > 0) {
+      let merged = {};
+      contents.forEach(content => {
+        merged = { ...merged, ...content };
+      });
+      delete merged.id;
+      return merged;
     }
     return null;
   } catch (error) {
-    console.error('Error fetching settings from Firebase:', error);
+    console.error('Error fetching content from Firebase:', error);
     return null;
   }
 }
@@ -238,183 +281,39 @@ async function saveSettingsToFirebase(settingsData) {
   }
 }
 
-// ===== MODIFIED FUNCTIONS FOR FIREBASE COMPATIBILITY =====
-
-// Modified getBookings to use Firebase with localStorage fallback
-function getBookings() {
-  // Try to get from Firebase, fallback to localStorage
-  return getBookingsFromFirebase().then(bookings => {
-    if (bookings.length > 0) {
-      return bookings;
-    }
-    // Fallback to localStorage
-    return originalGetBookings();
-  }).catch(() => {
-    return originalGetBookings();
-  });
-}
-
-// Modified saveBookings to use Firebase
-function saveBookings(bookings) {
-  // Save to localStorage as backup
-  originalSaveBookings(bookings);
-  // Save to Firebase
-  return saveBookingsToFirebase(bookings).catch(error => {
-    console.error('Failed to save to Firebase, but localStorage is updated:', error);
-  });
-}
-
-// Modified readJson to use Firebase
-function readJson(key, fallback) {
-  if (key === bookingKey) {
-    // For bookings, use Firebase
-    return getBookingsFromFirebase().then(bookings => {
-      return bookings.length > 0 ? bookings : fallback;
-    }).catch(() => {
-      return originalReadJson(key, fallback);
-    });
-  } else if (key === contentKey) {
-    // For content, use Firebase
-    return getContentFromFirebase().then(content => {
-      return content || fallback;
-    }).catch(() => {
-      return originalReadJson(key, fallback);
-    });
-  } else if (key === settingsKey) {
-    // For settings, use Firebase
-    return getSettingsFromFirebase().then(settings => {
-      return settings || fallback;
-    }).catch(() => {
-      return originalReadJson(key, fallback);
-    });
-  }
-  return originalReadJson(key, fallback);
-}
-
-// Modified writeJson to use Firebase
-function writeJson(key, value) {
-  // Save to localStorage as backup
-  originalWriteJson(key, value);
-  
-  // Save to Firebase
-  if (key === bookingKey) {
-    return saveBookingsToFirebase(value).catch(error => {
-      console.error('Failed to save bookings to Firebase:', error);
-    });
-  } else if (key === contentKey) {
-    return saveContentToFirebase(value).catch(error => {
-      console.error('Failed to save content to Firebase:', error);
-    });
-  } else if (key === settingsKey) {
-    return saveSettingsToFirebase(value).catch(error => {
-      console.error('Failed to save settings to Firebase:', error);
-    });
-  }
-}
-
-// ===== INITIALIZATION WITH REAL-TIME UPDATES =====
-
-// Flag to prevent multiple subscriptions
-let isSubscribed = false;
-
-// Enhanced loadAll with Firebase real-time updates
-function loadAllWithFirebase() {
-  // Load initial data
-  loadAll();
-  
-  // Set up real-time listeners if not already subscribed
-  if (!isSubscribed) {
-    // Subscribe to bookings updates
-    subscribeToBookings((bookings) => {
-      if (bookings.length > 0) {
-        // Update localStorage with Firebase data
-        originalSaveBookings(bookings);
-        renderBookings();
-        console.log('Bookings updated from Firebase');
-      }
-    });
-    
-    // Subscribe to content updates
-    subscribeToContent((contents) => {
-      if (contents.length > 0) {
-        const { id, ...contentData } = contents[0];
-        originalWriteJson(contentKey, contentData);
-        // Reload content without affecting bookings
-        content = mergeContent(contentData);
-        setSimpleFields();
-        renderRepeatEditors();
-        contentStatus.textContent = 'Content updated from Firebase';
-        console.log('Content updated from Firebase');
-      }
-    });
-    
-    // Subscribe to settings updates
-    subscribeToSettings((settings) => {
-      if (settings.length > 0) {
-        const { id, ...settingsData } = settings[0];
-        originalWriteJson(settingsKey, settingsData);
-        loadSettings();
-        console.log('Settings updated from Firebase');
-      }
-    });
-    
-    isSubscribed = true;
-    contentStatus.textContent = 'Connected to Firebase with real-time updates';
-  }
-}
-
-// ===== SYNC FUNCTIONS =====
-
-// Function to force sync all data to Firebase
-async function syncAllToFirebase() {
+async function getSettingsFromFirebase() {
   try {
-    contentStatus.textContent = 'Syncing to Firebase...';
-    
-    // Sync content
-    await saveContentToFirebase(content);
-    
-    // Sync settings
-    const settings = {
-      pickup: fields.pickup.checked,
-      urgent: fields.urgent.checked,
-      note: fields.note.value.trim()
-    };
-    await saveSettingsToFirebase(settings);
-    
-    // Sync bookings
-    const bookings = originalGetBookings();
-    await saveBookingsToFirebase(bookings);
-    
-    contentStatus.textContent = 'All data synced to Firebase successfully!';
-    console.log('All data synced to Firebase');
+    const settings = await getAllFromFirebase(COLLECTIONS.SETTINGS);
+    if (settings.length > 0) {
+      const { id, ...settingsData } = settings[0];
+      return settingsData;
+    }
+    return null;
   } catch (error) {
-    contentStatus.textContent = 'Sync failed: ' + error.message;
-    console.error('Sync failed:', error);
+    console.error('Error fetching settings from Firebase:', error);
+    return null;
   }
 }
 
-// Function to force pull from Firebase
+// ===== PULL DATA FROM FIREBASE =====
 async function pullAllFromFirebase() {
   try {
     contentStatus.textContent = 'Pulling from Firebase...';
     
-    // Pull content
     const firebaseContent = await getContentFromFirebase();
     if (firebaseContent) {
-      writeJson(contentKey, firebaseContent);
+      originalWriteJson(contentKey, firebaseContent);
       content = mergeContent(firebaseContent);
       setSimpleFields();
       renderRepeatEditors();
     }
     
-    // Pull settings
     const firebaseSettings = await getSettingsFromFirebase();
     if (firebaseSettings) {
-      writeJson(settingsKey, firebaseSettings);
+      originalWriteJson(settingsKey, firebaseSettings);
       loadSettings();
     }
     
-    // Pull bookings
     const firebaseBookings = await getBookingsFromFirebase();
     if (firebaseBookings.length > 0) {
       originalSaveBookings(firebaseBookings);
@@ -422,37 +321,66 @@ async function pullAllFromFirebase() {
     }
     
     contentStatus.textContent = 'All data pulled from Firebase successfully!';
-    console.log('All data pulled from Firebase');
   } catch (error) {
     contentStatus.textContent = 'Pull failed: ' + error.message;
     console.error('Pull failed:', error);
   }
 }
 
-// ===== MODIFIED EXPORT FUNCTIONS =====
+// ===== INITIALIZE FIREBASE LISTENERS =====
+let isSubscribed = false;
 
-// Modified exportAllData to include Firebase data
-async function exportAllDataWithFirebase() {
+function initFirebaseListeners() {
+  if (isSubscribed) return;
+  
   try {
-    const data = {
-      content: await getContentFromFirebase() || readJson(contentKey, defaultContent),
-      settings: await getSettingsFromFirebase() || readJson(settingsKey, defaultSettings),
-      bookings: await getBookingsFromFirebase() || getBookings(),
-      exportedAt: new Date().toISOString(),
-      source: 'Firebase'
-    };
-    downloadText('freshpress-admin-data.json', JSON.stringify(data, null, 2), 'application/json;charset=utf-8');
-    contentStatus.textContent = 'Data exported from Firebase';
+    subscribeToBookings((bookings) => {
+      if (bookings.length > 0) {
+        // Only update if different from localStorage
+        const local = originalReadJson(bookingKey, []);
+        if (JSON.stringify(local) !== JSON.stringify(bookings)) {
+          originalSaveBookings(bookings);
+          renderBookings();
+          console.log('Bookings updated from Firebase');
+        }
+      }
+    });
+    
+    subscribeToContent((contents) => {
+      if (contents.length > 0) {
+        const { id, ...contentData } = contents[0];
+        const local = originalReadJson(contentKey, {});
+        if (JSON.stringify(local) !== JSON.stringify(contentData)) {
+          originalWriteJson(contentKey, contentData);
+          content = mergeContent(contentData);
+          setSimpleFields();
+          renderRepeatEditors();
+          console.log('Content updated from Firebase');
+        }
+      }
+    });
+    
+    subscribeToSettings((settings) => {
+      if (settings.length > 0) {
+        const { id, ...settingsData } = settings[0];
+        const local = originalReadJson(settingsKey, {});
+        if (JSON.stringify(local) !== JSON.stringify(settingsData)) {
+          originalWriteJson(settingsKey, settingsData);
+          loadSettings();
+          console.log('Settings updated from Firebase');
+        }
+      }
+    });
+    
+    isSubscribed = true;
+    console.log('Firebase real-time listeners active');
   } catch (error) {
-    contentStatus.textContent = 'Export failed: ' + error.message;
+    console.warn('Firebase listeners not available:', error);
   }
 }
 
-// ===== CONNECT UI BUTTONS =====
-
-// Add sync buttons to UI
+// ===== UI CONTROLS =====
 function addFirebaseControls() {
-  // Create Firebase control container
   const controlsContainer = document.createElement('div');
   controlsContainer.className = 'firebase-controls';
   controlsContainer.style.cssText = `
@@ -469,110 +397,51 @@ function addFirebaseControls() {
   
   controlsContainer.innerHTML = `
     <span style="font-weight: 600; color: #1a5a8a;">☁️ Firebase:</span>
-    <button class="button" id="syncToFirebase">Sync to Cloud</button>
     <button class="button" id="pullFromFirebase">Pull from Cloud</button>
-    <button class="button" id="exportFirebaseData">Export Cloud Data</button>
     <span id="firebaseStatus" style="color: #2d7a3a; font-size: 0.9rem;">Connected</span>
   `;
   
-  // Insert after the content status
-  const statusContainer = document.querySelector('#contentStatus').parentElement;
-  statusContainer.insertAdjacentElement('afterend', controlsContainer);
+  const statusContainer = document.querySelector('#contentStatus')?.parentElement;
+  if (statusContainer) {
+    statusContainer.insertAdjacentElement('afterend', controlsContainer);
+  }
   
-  // Add event listeners
-  document.querySelector('#syncToFirebase').addEventListener('click', syncAllToFirebase);
-  document.querySelector('#pullFromFirebase').addEventListener('click', pullAllFromFirebase);
-  document.querySelector('#exportFirebaseData').addEventListener('click', exportAllDataWithFirebase);
+  document.querySelector('#pullFromFirebase')?.addEventListener('click', pullAllFromFirebase);
 }
 
-// ===== LOAD WITH FIREBASE =====
-
-// Override loadAll to use Firebase
-const originalLoadAll = window.loadAll || loadAll;
-window.loadAll = function() {
-  // First try to load from localStorage
-  originalLoadAll();
-  
-  // Then try to load from Firebase
-  setTimeout(() => {
-    try {
-      // Load content from Firebase
-      getContentFromFirebase().then(firebaseContent => {
-        if (firebaseContent) {
-          content = mergeContent(firebaseContent);
-          setSimpleFields();
-          renderRepeatEditors();
-          contentStatus.textContent = 'Loaded from Firebase';
-        }
-      });
-      
-      // Load bookings from Firebase
-      getBookingsFromFirebase().then(firebaseBookings => {
-        if (firebaseBookings.length > 0) {
-          originalSaveBookings(firebaseBookings);
-          renderBookings();
-        }
-      });
-      
-      // Load settings from Firebase
-      getSettingsFromFirebase().then(firebaseSettings => {
-        if (firebaseSettings) {
-          originalWriteJson(settingsKey, firebaseSettings);
-          loadSettings();
-        }
-      });
-      
-      // Set up real-time listeners
-      if (!isSubscribed) {
-        subscribeToBookings((bookings) => {
-          if (bookings.length > 0) {
-            originalSaveBookings(bookings);
-            renderBookings();
-          }
-        });
-        
-        subscribeToContent((contents) => {
-          if (contents.length > 0) {
-            const { id, ...contentData } = contents[0];
-            originalWriteJson(contentKey, contentData);
-            content = mergeContent(contentData);
-            setSimpleFields();
-            renderRepeatEditors();
-          }
-        });
-        
-        subscribeToSettings((settings) => {
-          if (settings.length > 0) {
-            const { id, ...settingsData } = settings[0];
-            originalWriteJson(settingsKey, settingsData);
-            loadSettings();
-          }
-        });
-        
-        isSubscribed = true;
-        contentStatus.textContent = 'Connected to Firebase with real-time updates';
-      }
-    } catch (error) {
-      console.warn('Firebase connection fallback to localStorage:', error);
-      contentStatus.textContent = 'Running in offline mode (localStorage)';
-    }
-  }, 500);
+// ===== MODIFIED loadAll =====
+// Keep original loadAll, just add Firebase listener initialization
+const originalLoadAll = window.loadAll || function() {
+  content = mergeContent(readJson(contentKey, defaultContent));
+  setSimpleFields();
+  renderRepeatEditors();
+  loadSettings();
+  renderBookings();
 };
 
-// ===== INITIALIZATION =====
+window.loadAll = function() {
+  // Call original
+  originalLoadAll();
+  
+  // Initialize Firebase listeners in background
+  setTimeout(() => {
+    try {
+      initFirebaseListeners();
+      contentStatus.textContent = 'Connected to Firebase';
+    } catch (e) {
+      console.warn('Firebase init skipped:', e);
+    }
+  }, 1000);
+};
 
-// Initialize with Firebase
+// ===== DOM READY =====
 document.addEventListener('DOMContentLoaded', () => {
-  // Add Firebase controls to UI
-  setTimeout(addFirebaseControls, 1000);
-  
-  // Load with Firebase
+  setTimeout(addFirebaseControls, 500);
   loadAll();
-  
-  console.log('FreshPress Admin with Firebase initialized');
+  console.log('FreshPress Admin with Firebase (fixed) initialized');
 });
 
-// Export Firebase functions for debugging
+// Export for debugging
 window.__firebase = {
   db,
   getBookingsFromFirebase,
@@ -581,6 +450,5 @@ window.__firebase = {
   saveContentToFirebase,
   getSettingsFromFirebase,
   saveSettingsToFirebase,
-  syncAllToFirebase,
   pullAllFromFirebase
 };
