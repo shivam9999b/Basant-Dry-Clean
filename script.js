@@ -1,3 +1,21 @@
+// 1. Firebase Modules ko Import kiya
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+// Aapka Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyDJuljdehf1ItBjFbrsEeHSQ2gGGQTYHYw",
+  authDomain: "basant-dry-clean.firebaseapp.com",
+  projectId: "basant-dry-clean",
+  storageBucket: "basant-dry-clean.firebasestorage.app",
+  messagingSenderId: "79904087714",
+  appId: "1:79904087714:web:cc044f80eeba4bfe84c1fb"
+};
+
+// Firebase Initialize
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
 const bookingKey = "freshpress-bookings";
 const contentKey = "freshpress-content";
 
@@ -9,8 +27,7 @@ const defaultContent = {
   hours: "Open daily, 8 AM - 9 PM",
   heroEyebrow: "Daily ironing and steam press service",
   heroTitle: "Clothes pressed crisp, packed neat, delivered on time.",
-  heroText:
-    "FreshPress handles shirts, sarees, suits, uniforms, and daily wear with careful heat settings, tidy folds, and doorstep pickup.",
+  heroText: "FreshPress handles shirts, sarees, suits, uniforms, and daily wear with careful heat settings, tidy folds, and doorstep pickup.",
   primaryCta: "Book pickup",
   secondaryCta: "View rates",
   stats: [
@@ -22,18 +39,9 @@ const defaultContent = {
   servicesEyebrow: "What we press",
   servicesTitle: "Care for everyday clothes and occasion wear.",
   services: [
-    {
-      title: "Daily Press",
-      text: "Shirts, trousers, kurtas, uniforms, and children's clothes pressed for a clean daily look.",
-    },
-    {
-      title: "Steam Finish",
-      text: "Gentle steam treatment for delicate fabrics, dresses, blazers, sarees, and festive outfits.",
-    },
-    {
-      title: "Bulk Orders",
-      text: "Weekly family bundles, hostel uniforms, office wear, and shop stock handled with order tags.",
-    },
+    { title: "Daily Press", text: "Shirts, trousers, kurtas, uniforms, and children's clothes pressed for a clean daily look." },
+    { title: "Steam Finish", text: "Gentle steam treatment for delicate fabrics, dresses, blazers, sarees, and festive outfits." },
+    { title: "Bulk Orders", text: "Weekly family bundles, hostel uniforms, office wear, and shop stock handled with order tags." },
   ],
   processEyebrow: "How it works",
   processTitle: "Simple pickup, clear tracking, fresh delivery.",
@@ -45,48 +53,21 @@ const defaultContent = {
   pricingEyebrow: "Transparent rates",
   pricingTitle: "Pick the plan that matches your wardrobe.",
   prices: [
-    {
-      title: "Everyday",
-      price: "Rs 12",
-      unit: "/piece",
-      text: "Shirts, trousers, T-shirts, kurtas, uniforms, and kidswear.",
-      featured: false,
-    },
-    {
-      title: "Steam Care",
-      price: "Rs 35",
-      unit: "/piece",
-      text: "Delicate garments, sarees, blazers, dresses, and premium fabrics.",
-      featured: true,
-    },
-    {
-      title: "Family Bundle",
-      price: "Rs 499",
-      unit: "/50 pcs",
-      text: "Weekly bundle with pickup, tagging, pressing, folding, and packing.",
-      featured: false,
-    },
+    { title: "Everyday", price: "Rs 12", unit: "/piece", text: "Shirts, trousers, T-shirts, kurtas, uniforms, and kidswear.", featured: false },
+    { title: "Steam Care", price: "Rs 35", unit: "/piece", text: "Delicate garments, sarees, blazers, dresses, and premium fabrics.", featured: true },
+    { title: "Family Bundle", price: "Rs 499", unit: "/50 pcs", text: "Weekly bundle with pickup, tagging, pressing, folding, and packing.", featured: false },
   ],
   bookingEyebrow: "Book today",
   bookingTitle: "Tell us what needs pressing.",
-  bookingText:
-    "Send a request and we will confirm pickup timing by phone or WhatsApp. For urgent orders, call directly.",
+  bookingText: "Send a request and we will confirm pickup timing by phone or WhatsApp. For urgent orders, call directly.",
   heroImage: "assets/pressing-studio.png",
   heroImageAlt: "Pressed shirts and steam iron arranged in a clean cloth care studio",
 };
 
-const readJson = (key, fallback) => {
-  try {
-    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
-  } catch {
-    return fallback;
-  }
-};
+let content = structuredClone(defaultContent);
+let globalBookings = []; // Cloud data yahan store hoga
 
-const writeJson = (key, value) => localStorage.setItem(key, JSON.stringify(value));
-const getBookings = () => readJson(bookingKey, []);
-const saveBookings = (bookings) => writeJson(bookingKey, bookings);
-const getContent = () => ({ ...defaultContent, ...readJson(contentKey, defaultContent) });
+// Helper function to escape HTML
 const escapeHtml = (value) =>
   String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -102,9 +83,11 @@ function setText(selector, value) {
   }
 }
 
-function renderContent() {
-  const content = getContent();
+// -----------------------------------------------------
+// 🔥 FIREBASE READ/WRITE FUNCTIONS FOR MAIN WEBSITE
+// -----------------------------------------------------
 
+function renderContent() {
   document.title = content.businessName;
   setText(".brand-mark", content.brandShort);
   setText(".brand span:last-child", content.businessName.replace(" Cloth Care", ""));
@@ -204,11 +187,9 @@ function bindBookingForm() {
   const form = document.querySelector("#bookingForm");
   const statusMessage = document.querySelector("#formStatus");
 
-  if (!form || !statusMessage) {
-    return;
-  }
+  if (!form || !statusMessage) return;
 
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
     const formData = new FormData(form);
@@ -216,25 +197,64 @@ function bindBookingForm() {
     const service = formData.get("service").toString().trim();
     const phone = formData.get("phone").toString().trim();
     const details = formData.get("details").toString().trim();
-    const bookings = getBookings();
 
-    bookings.unshift({
-      id: `FP-${Date.now().toString().slice(-6)}`,
-      name,
-      phone,
-      service,
-      details,
-      status: "New",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+    // Nayi booking add ki ja rahi hai cloud array ke top par
+    const updatedBookings = [
+      {
+        id: `FP-${Date.now().toString().slice(-6)}`,
+        name,
+        phone,
+        service,
+        details,
+        status: "New",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      ...globalBookings
+    ];
 
-    saveBookings(bookings);
-
-    statusMessage.textContent = `Thanks, ${name}. Your ${service} request is ready to confirm by phone.`;
-    form.reset();
+    try {
+      // Direct Firebase cloud database par array push kiya
+      await setDoc(doc(db, "freshpress", bookingKey), { data: updatedBookings });
+      statusMessage.textContent = `Thanks, ${name}. Your ${service} request is ready to confirm by phone.`;
+      form.reset();
+    } catch (error) {
+      console.error("Booking submission failed:", error);
+      statusMessage.textContent = "Something went wrong. Please try again or call us directly.";
+    }
   });
 }
 
-renderContent();
+// -----------------------------------------------------
+// 🎧 AUTOMATIC CLOUD REAL-TIME LISTENER FOR USER WEBSITE
+// -----------------------------------------------------
+function listenLiveCloudData() {
+  // 1. Live Content Sync (Jo admin panel se content change hoga, yahan bina refresh dikhega)
+  onSnapshot(doc(db, "freshpress", contentKey), (docSnap) => {
+    if (docSnap.exists()) {
+      const savedData = docSnap.data().data;
+      content = {
+        ...structuredClone(defaultContent),
+        ...savedData,
+        stats: savedData?.stats || structuredClone(defaultContent.stats),
+        promises: savedData?.promises || structuredClone(defaultContent.promises),
+        services: savedData?.services || structuredClone(defaultContent.services),
+        steps: savedData?.steps || structuredClone(defaultContent.steps),
+        prices: savedData?.prices || structuredClone(defaultContent.prices),
+      };
+    } else {
+      content = structuredClone(defaultContent);
+    }
+    renderContent();
+  });
+
+  // 2. Keep track of current bookings from cloud so we can unshift new ones
+  onSnapshot(doc(db, "freshpress", bookingKey), (docSnap) => {
+    globalBookings = docSnap.exists() ? (docSnap.data().data || []) : [];
+  });
+}
+
+// Initialize application
+listenLiveCloudData();
 bindBookingForm();
+    
